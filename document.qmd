@@ -146,24 +146,26 @@ for (i in 1:s) {
   data_control <- as.data.frame(samples_control)
   data_treatment <- as.data.frame(samples_treatment)
 
-  data_control <- pivot_longer(data_control,
-    cols = everything(),
-    names_to = "time", values_to = "DV"
-  ) |>
-    mutate(
-      condition = "control",
-      time = factor(time, levels = c("pre", "post"))
-    )
-  data_treatment <- pivot_longer(data_treatment,
-    cols = everything(),
-    names_to = "time", values_to = "DV"
-  ) |>
-    mutate(
-      condition = "treatment",
-      time = factor(time, levels = c("pre", "post"))
-    )
+  data_control <- reshape(
+    data_control,
+    direction = "long",
+    varying = c("pre", "post"),
+    v.names = "DV",
+    times = c("pre", "post")
+  )
+  data_treatment <- reshape(
+    data_treatment,
+    direction = "long",
+    varying = c("pre", "post"),
+    v.names = "DV",
+    times = c("pre", "post")
+  )
 
-  data <- bind_rows(data_control, data_treatment)
+  data_control$condition <- "control"
+  data_treatment$condition <- "treatment"
+  data_treatment$id <- data_treatment$id + N_control
+
+  data <- rbind(data_control, data_treatment)
 
   model <- lm(DV ~ condition * time, data = data)
   summary <- summary(model)
