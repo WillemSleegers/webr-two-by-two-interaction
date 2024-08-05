@@ -130,13 +130,11 @@ p_values <- vector(length = s)
 for (i in 1:s) {
   samples_control <- mvrnorm(
     N_control,
-    mu = mu_control, Sigma = Sigma_control,
-    empirical = TRUE
+    mu = mu_control, Sigma = Sigma_control
   )
   samples_treatment <- mvrnorm(
     N_treatment,
-    mu = mu_treatment, Sigma = Sigma_treatment,
-    empirical = TRUE
+    mu = mu_treatment, Sigma = Sigma_treatment
   )
 
   # Prepare data
