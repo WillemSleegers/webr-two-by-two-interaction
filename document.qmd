@@ -5,41 +5,32 @@ output-file: index.html
 fig-dpi: 600
 webr: 
   show-startup-message: true
-  packages: ['MASS', 'tidyverse']
+  packages: ['MASS', 'ggplot2']
   autoload-packages: true
 filters:
   - webr
 ---
 
-This is an interactive document to assess the power of a 2x2 interaction analysis.
+This is an interactive document to assess the power of a 2x2 interaction analysis for a linear model assuming a Gaussian family and a mixed design (i.e., one within-subjects factor and one between-subjects factor).
 
-## Setup
+## Parameters
 
-This setup code is run automatically when the page loads. It contains two functions that are used in the code sections below.
-
-```{webr-r}
-#| autorun: true
-
-```
-
-## Simulate data
-
-Here you can set the parameters of the power analysis.
+Here you set the parameters of the power analysis. For a 2x2 interaction with one within-subjects factor there are 12 parameters that need to be set. To simplify the analysis, you can assume that some parameters are identical to other parameters (e.g., set the same value for each standard deviation).
 
 ```{webr-r}
 # Parameters
-N_control <- 32
-N_treatment <- 32
-M_control_pre <- 3.2
-M_treatment_pre <- 3.5
-M_control_post <- 4.3
-M_treatment_post <- 4.5
-SD_control_pre <- 3.2
-SD_treatment_pre <- 3.2
-SD_control_post <- 3.2
-SD_treatment_post <- 3.2
-r_control <- 0.5
-r_treatment <- 0.5
+N_control <- 40
+N_treatment <- 38
+M_control_pre <- 3
+M_treatment_pre <- 3
+M_control_post <- 3
+M_treatment_post <- 3.8
+SD_control_pre <- 1
+SD_treatment_pre <- 1
+SD_control_post <- 1
+SD_treatment_post <- 1
+r_control <- 0.75
+r_treatment <- 0.75
 
 # Prepare parameters
 mu_control <- c(M_control_pre, M_control_post)
@@ -48,23 +39,26 @@ mu_treatment <- c(M_treatment_pre, M_treatment_post)
 Sigma_control <- matrix(
   ncol = 2, nrow = 2,
   c(
-    SD_control_pre^2, 
+    SD_control_pre^2,
     SD_control_pre * SD_control_post * r_control,
-    SD_control_pre * SD_control_post * r_control, 
+    SD_control_pre * SD_control_post * r_control,
     SD_control_post^2
   )
 )
 Sigma_treatment <- matrix(
   ncol = 2, nrow = 2,
   c(
-    SD_treatment_pre^2, 
+    SD_treatment_pre^2,
     SD_treatment_pre * SD_treatment_post * r_treatment,
-    SD_control_pre * SD_control_post * r_control, 
+    SD_control_pre * SD_control_post * r_control,
     SD_control_post^2
   )
 )
 ```
+
 ## Visualize parameters
+
+Here you can visualize the parameters. If you run the code chunk in this section, the data will be simulated once, producing a sample of the data that will exactly match the parameters. This data is visualized at the end so you can get a better grasp of the parameters (or at least the mean differences).
 
 ```{webr-r}
 samples_control <- mvrnorm(
@@ -85,39 +79,49 @@ colnames(samples_treatment) <- c("pre", "post")
 data_control <- as.data.frame(samples_control)
 data_treatment <- as.data.frame(samples_treatment)
 
-data_control <- pivot_longer(data_control,
-  cols = everything(),
-  names_to = "time", values_to = "DV"
-) |>
-  mutate(
-    condition = "control",
-    time = factor(time, levels = c("pre", "post"))
-  )
-data_treatment <- pivot_longer(data_treatment,
-  cols = everything(),
-  names_to = "time", values_to = "DV"
-) |>
-  mutate(
-    condition = "treatment",
-    time = factor(time, levels = c("pre", "post"))
-  )
+data_control <- reshape(
+  data_control,
+  direction = "long",
+  varying = c("pre", "post"),
+  v.names = "DV",
+  times = c("pre", "post")
+)
+data_treatment <- reshape(
+  data_treatment,
+  direction = "long",
+  varying = c("pre", "post"),
+  v.names = "DV",
+  times = c("pre", "post")
+)
 
-data <- bind_rows(data_control, data_treatment)
+data_control$condition <- "control"
+data_treatment$condition <- "treatment"
+data_treatment$id <- data_treatment$id + N_control
+
+data <- rbind(data_control, data_treatment)
+data$time <- factor(data$time, levels = c("pre", "post"))
 
 ggplot(
   data,
   aes(
     x = time,
     y = DV,
-    color = condition,
-    group = condition
+    color = condition
   )
 ) +
-  stat_summary(fun = "mean", geom = "line") +
-  stat_summary(fun = "mean", geom = "point")
+  stat_summary(
+    fun = "mean", geom = "point"
+  ) +
+  stat_summary(
+    aes(group = condition),
+    fun = "mean", geom = "line"
+  ) +
+  theme_minimal()
 ```
 
 ## Power analysis
+
+Here we conduct the power analysis by repeatedly simulating (`s` times) data with the parameters previously specified. We extract the p-value for the interaction effect between time and condition and store it so we can calculate the power as the number of times a significant effect is obtained divided by the number of simulations (`s`). You can increase `s` to obtain a more precise estimate of the power.
 
 ```{webr-r}
 s <- 1000
@@ -163,7 +167,7 @@ for (i in 1:s) {
 
   model <- lm(DV ~ condition * time, data = data)
   summary <- summary(model)
-  
+
   p_values[i] <- coef(summary)[4, "Pr(>|t|)"]
 }
 
