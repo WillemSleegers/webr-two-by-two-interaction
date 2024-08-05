@@ -1,0 +1,172 @@
+---
+title: "Power analysis for a 2x2 interaction"
+format: html
+output-file: index.html
+fig-dpi: 600
+webr: 
+  show-startup-message: true
+  packages: ['MASS', 'tidyverse']
+  autoload-packages: true
+filters:
+  - webr
+---
+
+This is an interactive document to assess the power of a 2x2 interaction analysis.
+
+## Setup
+
+This setup code is run automatically when the page loads. It contains two functions that are used in the code sections below.
+
+```{webr-r}
+#| autorun: true
+
+```
+
+## Simulate data
+
+Here you can set the parameters of the power analysis.
+
+```{webr-r}
+# Parameters
+N_control <- 32
+N_treatment <- 32
+M_control_pre <- 3.2
+M_treatment_pre <- 3.5
+M_control_post <- 4.3
+M_treatment_post <- 4.5
+SD_control_pre <- 3.2
+SD_treatment_pre <- 3.2
+SD_control_post <- 3.2
+SD_treatment_post <- 3.2
+r_control <- 0.5
+r_treatment <- 0.5
+
+# Prepare parameters
+mu_control <- c(M_control_pre, M_control_post)
+mu_treatment <- c(M_treatment_pre, M_treatment_post)
+
+Sigma_control <- matrix(
+  ncol = 2, nrow = 2,
+  c(
+    SD_control_pre^2, 
+    SD_control_pre * SD_control_post * r_control,
+    SD_control_pre * SD_control_post * r_control, 
+    SD_control_post^2
+  )
+)
+Sigma_treatment <- matrix(
+  ncol = 2, nrow = 2,
+  c(
+    SD_treatment_pre^2, 
+    SD_treatment_pre * SD_treatment_post * r_treatment,
+    SD_control_pre * SD_control_post * r_control, 
+    SD_control_post^2
+  )
+)
+```
+## Visualize parameters
+
+```{webr-r}
+samples_control <- mvrnorm(
+  N_control,
+  mu = mu_control, Sigma = Sigma_control,
+  empirical = TRUE
+)
+samples_treatment <- mvrnorm(
+  N_treatment,
+  mu = mu_treatment, Sigma = Sigma_treatment,
+  empirical = TRUE
+)
+
+# Prepare data
+colnames(samples_control) <- c("pre", "post")
+colnames(samples_treatment) <- c("pre", "post")
+
+data_control <- as.data.frame(samples_control)
+data_treatment <- as.data.frame(samples_treatment)
+
+data_control <- pivot_longer(data_control,
+  cols = everything(),
+  names_to = "time", values_to = "DV"
+) |>
+  mutate(
+    condition = "control",
+    time = factor(time, levels = c("pre", "post"))
+  )
+data_treatment <- pivot_longer(data_treatment,
+  cols = everything(),
+  names_to = "time", values_to = "DV"
+) |>
+  mutate(
+    condition = "treatment",
+    time = factor(time, levels = c("pre", "post"))
+  )
+
+data <- bind_rows(data_control, data_treatment)
+
+ggplot(
+  data,
+  aes(
+    x = time,
+    y = DV,
+    color = condition,
+    group = condition
+  )
+) +
+  stat_summary(fun = "mean", geom = "line") +
+  stat_summary(fun = "mean", geom = "point")
+```
+
+## Power analysis
+
+```{webr-r}
+s <- 1000
+p_values <- vector(length = s)
+
+for (i in 1:s) {
+  samples_control <- mvrnorm(
+    N_control,
+    mu = mu_control, Sigma = Sigma_control,
+    empirical = TRUE
+  )
+  samples_treatment <- mvrnorm(
+    N_treatment,
+    mu = mu_treatment, Sigma = Sigma_treatment,
+    empirical = TRUE
+  )
+
+  # Prepare data
+  colnames(samples_control) <- c("pre", "post")
+  colnames(samples_treatment) <- c("pre", "post")
+
+  data_control <- as.data.frame(samples_control)
+  data_treatment <- as.data.frame(samples_treatment)
+
+  data_control <- pivot_longer(data_control,
+    cols = everything(),
+    names_to = "time", values_to = "DV"
+  ) |>
+    mutate(
+      condition = "control",
+      time = factor(time, levels = c("pre", "post"))
+    )
+  data_treatment <- pivot_longer(data_treatment,
+    cols = everything(),
+    names_to = "time", values_to = "DV"
+  ) |>
+    mutate(
+      condition = "treatment",
+      time = factor(time, levels = c("pre", "post"))
+    )
+
+  data <- bind_rows(data_control, data_treatment)
+
+  model <- lm(DV ~ condition * time, data = data)
+  summary <- summary(model)
+  
+  p_values[i] <- coef(summary)[4, "Pr(>|t|)"]
+}
+
+power <- sum(p_values < .05) / s
+paste0("Power of the interaction effect: ", power * 100, "%")
+```
