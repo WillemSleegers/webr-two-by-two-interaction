@@ -22,6 +22,8 @@ yellow <- "#f2b831"
 
 This is an interactive document to assess the power of a 2x2 interaction analysis for a linear model assuming a Gaussian family and a mixed design (i.e., one within-subjects factor and one between-subjects factor). This could be used to conduct a power analysis for a difference-in-difference study with two time points (e.g., before vs. after) and two groups (e.g., control vs. treatment).
 
+To use this document, click on 'Run Code' in each code chunk to run the code. Make sure to run the code chunk in the 'Parameters' section before running the code chunks in the 'Visualize parameters' and 'Power analysis' section.
+
 ## Parameters
 
 For a 2x2 interaction with one within-subjects factor there are 12 parameters that need to be set:
@@ -78,7 +80,9 @@ Sigma_treatment <- matrix(
 
 ## Visualize parameters
 
-To help set the right parameter values, you can use the code here to visualize the means in each group. The code below simulates the data once, producing a sample of the data that will exactly match the parameter values. It then visualizes the means so you can see
+To help set the right parameter values, you can use the code here to visualize the data that the parameters produce. The code below simulates the data once, producing a sample of the data that will exactly match the parameter values. It then visualizes the means and distribution of data points.
+
+If you want to set the means based on proportions of each Likert option, per group, you can use the extra section at the bottom to convert proportions to means.
 
 ```{webr-r}
 #| fig-lbl: test
