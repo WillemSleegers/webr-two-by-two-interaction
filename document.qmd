@@ -1,21 +1,41 @@
 ---
-title: "Power analysis for a 2x2 interaction"
+title: "Difference-in-difference power analysis"
 format: html
 output-file: index.html
-fig-dpi: 600
 webr: 
   show-startup-message: true
-  packages: ['MASS', 'ggplot2']
+  packages: ['MASS', 'ggplot2', 'lmerTest']
   autoload-packages: true
 filters:
   - webr
 ---
 
-This is an interactive document to assess the power of a 2x2 interaction analysis for a linear model assuming a Gaussian family and a mixed design (i.e., one within-subjects factor and one between-subjects factor).
+```{webr-r}
+#| context: setup
+print_text <- function(x) {
+  cat("<p style='font-family: var(--bs-body-font-family)'>", x, "</p>")
+}
+
+blue <- "#4a96bb"
+yellow <- "#f2b831"
+```
+
+This is an interactive document to assess the power of a 2x2 interaction analysis for a linear model assuming a Gaussian family and a mixed design (i.e., one within-subjects factor and one between-subjects factor). This could be used to conduct a power analysis for a difference-in-difference study with two time points (e.g., before vs. after) and two groups (e.g., control vs. treatment).
 
 ## Parameters
 
-Here you set the parameters of the power analysis. For a 2x2 interaction with one within-subjects factor there are 12 parameters that need to be set. To simplify the analysis, you can assume that some parameters are identical to other parameters (e.g., set the same value for each standard deviation).
+For a 2x2 interaction with one within-subjects factor there are 12 parameters that need to be set:
+
+-   The means in each group at each time point (parameters starting with `M_`)
+-   The standard deviations in each group at each time point (parameters starting with `SD_`)
+-   The sample size in each group (parameters starting with `N_`)
+-   The correlations of the repeated measures in each group (parameters starting with `r_`)
+
+To simplify this, you can assume that some parameters are identical to other parameters (e.g., set the same value for each standard deviation).
+
+Use the code chunk below to tweak the parameter values or simply hit 'Run Code' to rely on the default values.
+
+After the parameters section, the parameters are separately stored as means and variance-covariance matrices (called Sigma).
 
 ```{webr-r}
 # Parameters
@@ -24,7 +44,7 @@ N_treatment <- 38
 M_control_pre <- 3
 M_treatment_pre <- 3
 M_control_post <- 3
-M_treatment_post <- 3.8
+M_treatment_post <- 3.5
 SD_control_pre <- 1
 SD_treatment_pre <- 1
 SD_control_post <- 1
@@ -58,9 +78,10 @@ Sigma_treatment <- matrix(
 
 ## Visualize parameters
 
-Here you can visualize the parameters. If you run the code chunk in this section, the data will be simulated once, producing a sample of the data that will exactly match the parameters. This data is visualized at the end so you can get a better grasp of the parameters (or at least the mean differences).
+To help set the right parameter values, you can use the code here to visualize the means in each group. The code below simulates the data once, producing a sample of the data that will exactly match the parameter values. It then visualizes the means so you can see
 
 ```{webr-r}
+#| fig-lbl: test
 samples_control <- mvrnorm(
   N_control,
   mu = mu_control, Sigma = Sigma_control,
@@ -103,28 +124,42 @@ data$time <- factor(data$time, levels = c("pre", "post"))
 
 ggplot(
   data,
-  aes(
-    x = time,
-    y = DV,
-    color = condition
-  )
+  aes(x = time, y = DV, color = condition)
 ) +
+  facet_wrap(~condition) +
+  geom_violin(fill = "gray90", color = "white") +
+  geom_jitter(
+    position = position_jitterdodge(
+      dodge.width = .9, jitter.width = .25
+    )
+  ) +
   stat_summary(
-    fun = "mean", geom = "point"
+    fun = "mean", geom = "point", position = position_dodge(.9),
+    color = "black"
   ) +
   stat_summary(
     aes(group = condition),
-    fun = "mean", geom = "line"
+    fun = "mean", geom = "line", color = "black",
+    position = position_dodge(.9)
   ) +
+  guides(fill = "none", color = "none") +
+  scale_color_manual(values = c(yellow, blue)) +
   theme_minimal()
 ```
 
 ## Power analysis
 
-Here we conduct the power analysis by repeatedly simulating (`s` times) data with the parameters previously specified. We extract the p-value for the interaction effect between time and condition and store it so we can calculate the power as the number of times a significant effect is obtained divided by the number of simulations (`s`). You can increase `s` to obtain a more precise estimate of the power.
+Here we conduct the power analysis by repeatedly simulating (`s` times) data with the parameters previously specified. We extract the relevant p-value and store it so we can calculate the power as the number of times a significant effect is obtained divided by the number of simulations (`s`). You can increase `s` to obtain a more precise estimate of the power.
+
+For a difference-in-difference analysis, the crucial test is that of the interaction term between the two conditions (control vs. treatment) and time (pre vs. post). The code below calculates the power for this test.
+
+::: callout-caution
+Note: Depending on the number of simulations, this can take a while to run.
+:::
 
 ```{webr-r}
-s <- 1000
+#| results: "asis"
+s <- 500
 p_values <- vector(length = s)
 
 for (i in 1:s) {
@@ -165,12 +200,31 @@ for (i in 1:s) {
 
   data <- rbind(data_control, data_treatment)
 
-  model <- lm(DV ~ condition * time, data = data)
-  summary <- summary(model)
+  model <- lmer(DV ~ condition * time + (1 | id), data = data)
 
-  p_values[i] <- coef(summary)[4, "Pr(>|t|)"]
+  p_values[i] <- coef(summary(model))[4, "Pr(>|t|)"]
 }
 
 power <- sum(p_values < .05) / s
-paste0("Power of the interaction effect: ", power * 100, "%")
+
+print_text(
+  paste0("Power of the interaction effect: ", power * 100, "%")
+)
+```
+
+## Extra: Estimating mean differences
+
+You can use the code below to help set the means for each group by converting proportions of responses (e.g., the proportion of participants in the treatment condition who selected a '4') to means for use in the power analysis. Set the proportions of each response (ranging from 1 to 5) in each group and see what the mean is in each group and their difference.
+
+```{webr-r}
+#| results: "asis"
+props_control <- c(.1, .25, .3, .25, .1)
+props_treatment <- c(.05, .2, .35, .275, .125)
+
+M_control <- weighted.mean(1:5, w = props_control)
+M_treatment <- weighted.mean(1:5, w = props_treatment)
+
+print_text(paste("Mean (control):", M_control))
+print_text(paste("Mean (treatment):", M_treatment))
+print_text(paste("Mean difference:", M_treatment - M_control))
 ```
